@@ -39,6 +39,11 @@ public class ErrorMsg extends AbstractRedisMsg<String> {
 
     @Override
     public String toString() {
+        return "-" + data + CRLFReadable;
+    }
+    
+    @Override
+    public String toRawString() {
         return "-" + data + "\r\n";
     }
     
@@ -53,6 +58,11 @@ public class ErrorMsg extends AbstractRedisMsg<String> {
     @Override
     public String data() {
         return data;
+    }
+
+    @Override
+    public int getOffsetSize() {
+        return data.length() + 3;
     }
 
 }

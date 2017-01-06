@@ -33,6 +33,11 @@ public class IntegerMsg extends AbstractRedisMsg<Integer> {
 
     @Override
     public String toString() {
+        return ":" + data + CRLFReadable;
+    }
+    
+    @Override
+    public String toRawString() {
         return ":" + data + "\r\n";
     }
 
@@ -47,5 +52,10 @@ public class IntegerMsg extends AbstractRedisMsg<Integer> {
             return data.equals(((IntegerMsg)obj).data());
         }
         return false;
+    }
+
+    @Override
+    public int getOffsetSize() {
+        return String.valueOf(data).length() + 3;
     }
 }

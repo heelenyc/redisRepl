@@ -1,5 +1,8 @@
 package redis.repl.context;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import redis.repl.api.ReplyStatus;
 
 /**
@@ -8,12 +11,16 @@ import redis.repl.api.ReplyStatus;
  * 
  */
 public class ReplyContext {
-
-//    private volatile String runID = "1e3c43d89bbfaf8971c2d02c14a1be116d09f985";
-//    private volatile long offset = 19546l - 5;
-    private volatile String runID = "?";
-    private volatile long offset = 0l;
     
+    private Logger logger = LoggerFactory.getLogger(ReplyContext.class);
+
+    private volatile String runID = "a321c2e94fc938c78eb09d5fabcb4838dabf9b61";
+    private volatile long offset = 2l;
+//    private volatile String runID = "?";
+//    private volatile long offset = 0l;
+    
+    private String RDB_runID;
+    private long RDB_offset;
     
     private volatile long lastiotimestmap = System.currentTimeMillis();
 
@@ -66,4 +73,25 @@ public class ReplyContext {
         this.isAckScheduleStarted = isAckStarted;
     }
 
+    public String getRDB_runID() {
+        return RDB_runID;
+    }
+
+    public void setRDB_runID(String rDB_runID) {
+        RDB_runID = rDB_runID;
+    }
+
+    public long getRDB_offset() {
+        return RDB_offset;
+    }
+
+    public void setRDB_offset(long rDB_offset) {
+        RDB_offset = rDB_offset;
+    }
+
+    public void updateRunidAndOffsetFromRDB(){
+        this.runID = this.RDB_runID;
+        this.offset = this.RDB_offset;
+        logger.info("alter rdb, update runid = " + this.runID + " offset = " + this.offset);
+    }
 }

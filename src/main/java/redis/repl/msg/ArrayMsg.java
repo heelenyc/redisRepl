@@ -46,12 +46,23 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     @Override
     public String toString() {
         StringBuffer sb = new StringBuffer();
-        sb.append("*" + list.size() + "\r\n");
+        sb.append("*" + list.size() + CRLFReadable);
         for ( AbstractRedisMsg<?> msg : list) {
             sb.append(msg.toString());
         }
         return sb.toString();
     }
+    
+    public String toRawString() {
+        StringBuffer sb = new StringBuffer();
+        sb.append("*" + list.size() + "\r\n");
+        for ( AbstractRedisMsg<?> msg : list) {
+            sb.append(msg.toRawString());
+        }
+        return sb.toString();
+    }
+    
+    
     
     @Override
     public List<AbstractRedisMsg<?>> data() {
@@ -61,5 +72,14 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     @Override
     public boolean equals(Object obj) {
         return super.equals(obj);
+    }
+    @Override
+    public int getOffsetSize() {
+        Integer size = 1;
+        size += String.valueOf(list.size()).length();
+        for ( AbstractRedisMsg<?> msg : list) {
+            size += msg.getOffsetSize();
+        }
+        return size;
     }
 }

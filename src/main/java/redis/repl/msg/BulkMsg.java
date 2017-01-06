@@ -59,7 +59,17 @@ public class BulkMsg extends AbstractRedisMsg<String> {
 
     @Override
     public String toString() {
+        return "$" + String.valueOf(len) + CRLFReadable+ data + CRLFReadable;
+    }
+    
+    @Override
+    public String toRawString() {
         return "$" + String.valueOf(len) + "\r\n"+ data + "\r\n";
+    }
+
+    @Override
+    public int getOffsetSize() {
+        return String.valueOf(len).length() + data.length() + 5;
     }
     
     

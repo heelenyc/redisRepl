@@ -40,7 +40,12 @@ public class SimpleStringMsg extends AbstractRedisMsg<String> {
 
     @Override
     public String toString() {
-        return "+" + new String(data) + "\r\n";
+        return "+" + data + CRLFReadable;
+    }
+    
+    @Override
+    public String toRawString() {
+        return "+" + data + "\r\n";
     }
     
     @Override
@@ -54,5 +59,10 @@ public class SimpleStringMsg extends AbstractRedisMsg<String> {
     @Override
     public String data() {
         return data;
+    }
+
+    @Override
+    public int getOffsetSize() {
+        return data.length() + 3;
     }
 }

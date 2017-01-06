@@ -13,22 +13,14 @@ import java.io.IOException;
 public abstract class AbstractRedisMsg<T> {
 
     public static final byte[] CRLF = new byte[] { '\r', '\n' };
-    
-    private int ByteSize = 0;
+    public static final String CRLFReadable = "/r/n";
     
     public abstract void write(ByteBuf out) throws IOException;
     
     public abstract T data();
     
-    public int getByteSize() {
-        if (ByteSize == 0) {
-            return toString().getBytes().length;
-        }
-        return ByteSize;
-    }
+    public abstract int getOffsetSize(); // 用来增长offset用
     
-    public void setByteSize(int byteSize) {
-        ByteSize = byteSize;
-    }
+    public abstract String toRawString();
     
 }

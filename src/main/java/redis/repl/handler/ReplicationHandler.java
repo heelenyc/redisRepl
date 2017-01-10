@@ -9,18 +9,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import redis.repl.SlaveClient;
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 import redis.repl.api.ReplyStatus;
 import redis.repl.cmd.CommonCmdUtil;
 import redis.repl.context.ReplyContext;
-import redis.repl.msg.SimpleStringMsg;
+import redis.repl.msg.UnexpectedMsg;
+import redis.repl.msg.redis.SimpleStringMsg;
 
 /**
  * @author yicheng
  * @since 2016年10月19日
  * 
  */
-public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractRedisMsg<?>> {
+public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractMsg<?>> {
 
     private Logger logger = LoggerFactory.getLogger(ReplicationHandler.class);
 
@@ -68,7 +69,7 @@ public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractRedi
     }
 
     @Override
-    protected void channelRead0(final ChannelHandlerContext ctx, AbstractRedisMsg<?> msg) throws Exception {
+    protected void channelRead0(final ChannelHandlerContext ctx, AbstractMsg<?> msg) throws Exception {
 
         if (replyContext.getStatus() == ReplyStatus.FINISH_SEND_PING) {
             // 收到pong回应之后 发psync操作
@@ -105,7 +106,12 @@ public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractRedi
                 logger.error("unexpected msg : " + msg);
             }
         } else if (replyContext.getStatus() == ReplyStatus.ONLINE_MODE) {
-            logger.info("online : " + msg + "  bytes :" + (msg.getOffsetSize() != 14 ? "===== msg.getByteSize()" : ""));
+            // logger.info("online : " + msg + "  bytes :" + (msg.getOffsetSize() != 14 ? "=====" + msg.getOffsetSize() : ""));
+            if (msg instanceof UnexpectedMsg) {
+                logger.error("[{}] unexpected prefix for redis request : {}", replyContext.getStatus().name(), msg);
+                // 考虑是不是要停掉
+            }
+            // offset 增加
             replyContext.incOffset(msg.getOffsetSize());
             if (CommonCmdUtil.PING.equals(msg)) {
                 // 回 pong 操作

@@ -1,36 +1,35 @@
-package redis.repl.msg;
+package redis.repl.msg.redis;
 
 import io.netty.buffer.ByteBuf;
 
 import java.io.IOException;
 
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 
 /**
  * @author yicheng
  * @since 2016年1月11日
  * 
  */
-public class SimpleStringMsg extends AbstractRedisMsg<String> {
+public class ErrorMsg extends AbstractMsg<String> {
 
-    public static final SimpleStringMsg OK = new SimpleStringMsg(new byte[] { 'o', 'k' });
-
-    private static final char MARKER = '+';
+    private static final char MARKER = '-';
 
     private final String data;
 
-    public SimpleStringMsg(byte[] bytedata) {
-        this.data = new String(bytedata);
+    public ErrorMsg(byte[] data) {
+        this.data = new String(data);
     }
     
-    public SimpleStringMsg(String data) {
+    public ErrorMsg(String data) {
         if (data == null) {
             this.data = "";
         }else {
             this.data = data;
         }
     }
-    
+
+
     @Override
     public void write(ByteBuf out) throws IOException {
         out.writeByte(MARKER);
@@ -40,18 +39,18 @@ public class SimpleStringMsg extends AbstractRedisMsg<String> {
 
     @Override
     public String toString() {
-        return "+" + data + CRLFReadable;
+        return "-" + data + CRLFReadable;
     }
     
     @Override
     public String toRawString() {
-        return "+" + data + "\r\n";
+        return "-" + data + "\r\n";
     }
     
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof SimpleStringMsg) {
-            return data.equals(((SimpleStringMsg)obj).data());
+        if (obj instanceof ErrorMsg) {
+            return data.equals(((ErrorMsg)obj).data());
         }
         return false;
     }
@@ -65,4 +64,5 @@ public class SimpleStringMsg extends AbstractRedisMsg<String> {
     public int getOffsetSize() {
         return data.length() + 3;
     }
+
 }

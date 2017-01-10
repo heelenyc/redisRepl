@@ -10,7 +10,7 @@ import java.io.IOException;
  * @since 2016年1月11日
  *
  */
-public abstract class AbstractRedisMsg<T> {
+public abstract class AbstractMsg<T> {
 
     public static final byte[] CRLF = new byte[] { '\r', '\n' };
     public static final String CRLFReadable = "/r/n";

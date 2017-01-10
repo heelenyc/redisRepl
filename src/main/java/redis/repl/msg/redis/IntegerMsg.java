@@ -1,17 +1,17 @@
-package redis.repl.msg;
+package redis.repl.msg.redis;
 
 import io.netty.buffer.ByteBuf;
 
 import java.io.IOException;
 
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 
 /**
  * @author yicheng
  * @since 2016年1月11日
  * 
  */
-public class IntegerMsg extends AbstractRedisMsg<Integer> {
+public class IntegerMsg extends AbstractMsg<Integer> {
 
     public static final IntegerMsg OK = new IntegerMsg(1);
     public static final IntegerMsg ERROR = new IntegerMsg(0);

@@ -1,4 +1,4 @@
-package redis.repl.msg;
+package redis.repl.msg.redis;
 
 import io.netty.buffer.ByteBuf;
 
@@ -6,24 +6,24 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 
 /**
  * @author yicheng
  * @since 2016年10月19日
  * 
  */
-public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
+public class ArrayMsg extends AbstractMsg<List<AbstractMsg<?>>> {
 
     private static final char MARKER = '*';
 
-    private List<AbstractRedisMsg<?>> list;
+    private List<AbstractMsg<?>> list;
     
     /**
      * 只包含字符串的数据构造
      */
     public ArrayMsg(List<String> bulks) {
-        list = new ArrayList<AbstractRedisMsg<?>>();
+        list = new ArrayList<AbstractMsg<?>>();
         for (String bulk : bulks) {
             list.add(new BulkMsg(bulk));
         }
@@ -35,7 +35,7 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
             out.writeBytes(String.valueOf(list.size()).getBytes());
             out.writeBytes(CRLF);
 
-            for (AbstractRedisMsg<?> element : list) {
+            for (AbstractMsg<?> element : list) {
                 element.write(out);
             }
         } else {
@@ -47,7 +47,7 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     public String toString() {
         StringBuffer sb = new StringBuffer();
         sb.append("*" + list.size() + CRLFReadable);
-        for ( AbstractRedisMsg<?> msg : list) {
+        for ( AbstractMsg<?> msg : list) {
             sb.append(msg.toString());
         }
         return sb.toString();
@@ -56,7 +56,7 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     public String toRawString() {
         StringBuffer sb = new StringBuffer();
         sb.append("*" + list.size() + "\r\n");
-        for ( AbstractRedisMsg<?> msg : list) {
+        for ( AbstractMsg<?> msg : list) {
             sb.append(msg.toRawString());
         }
         return sb.toString();
@@ -65,7 +65,7 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     
     
     @Override
-    public List<AbstractRedisMsg<?>> data() {
+    public List<AbstractMsg<?>> data() {
         return list;
     }
 
@@ -76,8 +76,8 @@ public class ArrayMsg extends AbstractRedisMsg<List<AbstractRedisMsg<?>>> {
     @Override
     public int getOffsetSize() {
         Integer size = 1;
-        size += String.valueOf(list.size()).length();
-        for ( AbstractRedisMsg<?> msg : list) {
+        size += String.valueOf(list.size()).length() + 2;
+        for ( AbstractMsg<?> msg : list) {
             size += msg.getOffsetSize();
         }
         return size;

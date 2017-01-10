@@ -1,17 +1,17 @@
-package redis.repl.msg;
+package redis.repl.msg.redis;
 
 import io.netty.buffer.ByteBuf;
 
 import java.io.IOException;
 
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 
 /**
  * @author yicheng
  * @since 2016年1月11日
  * 
  */
-public class BulkMsg extends AbstractRedisMsg<String> {
+public class BulkMsg extends AbstractMsg<String> {
 
     public static final BulkMsg NIL_REPLY = new BulkMsg();
 

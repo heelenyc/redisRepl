@@ -15,7 +15,7 @@ public class ReplyContext {
     private Logger logger = LoggerFactory.getLogger(ReplyContext.class);
 
     private volatile String runID = "a321c2e94fc938c78eb09d5fabcb4838dabf9b61";
-    private volatile long offset = 2l;
+    private volatile long offset = 16637l;
 //    private volatile String runID = "?";
 //    private volatile long offset = 0l;
     
@@ -44,7 +44,7 @@ public class ReplyContext {
     }
     
     public void incOffset(long inc) {
-        if (status == ReplyStatus.ONLINE_MODE) {
+        if (status == ReplyStatus.ONLINE_MODE || status == ReplyStatus.FINISH_SEND_PSYNC) {
             this.offset = offset + inc;
         }
     }

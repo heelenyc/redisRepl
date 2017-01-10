@@ -3,7 +3,7 @@ package redis.repl.coder;
 import java.util.ArrayList;
 import java.util.List;
 
-import redis.repl.msg.ArrayMsg;
+import redis.repl.msg.redis.ArrayMsg;
 
 /**
  * decode 用

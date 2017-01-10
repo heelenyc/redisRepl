@@ -4,19 +4,30 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ReplayingDecoder;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.List;
+
+import net.whitbeck.rdbparser.Aux;
+import net.whitbeck.rdbparser.DbSelect;
+import net.whitbeck.rdbparser.Entry;
+import net.whitbeck.rdbparser.EntryType;
+import net.whitbeck.rdbparser.KeyValuePair;
+import net.whitbeck.rdbparser.RdbParser;
+import net.whitbeck.rdbparser.ResizeDb;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import redis.repl.SlaveClient;
-import redis.repl.api.AbstractRedisMsg;
+import redis.repl.api.AbstractMsg;
 import redis.repl.api.ReplyStatus;
 import redis.repl.context.ReplyContext;
-import redis.repl.msg.BulkMsg;
-import redis.repl.msg.ErrorMsg;
-import redis.repl.msg.IntegerMsg;
-import redis.repl.msg.SimpleStringMsg;
+import redis.repl.msg.UnexpectedMsg;
+import redis.repl.msg.redis.BulkMsg;
+import redis.repl.msg.redis.ErrorMsg;
+import redis.repl.msg.redis.IntegerMsg;
+import redis.repl.msg.redis.SimpleStringMsg;
 
 /**
  * 客户端读回应，server读命令，但是都是消息
@@ -31,6 +42,14 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
 
     private ReplyContext replyContext;
 
+    // used to crontrol receive rdb file
+    private String rdbFileName;
+    // private Thread rdbThread;
+    private RandomAccessFile file;
+    private boolean isReadytoReceive = false;
+    private int rdbSize;
+    private int readedRdbSize;
+
     /** Decoded command and arguments */
     private RedisCommand redisCommand;
 
@@ -42,10 +61,10 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
         this.replyContext = replyContext;
     }
 
-    private byte getChar(byte b) {
-        // return (char) (((0 & 0xFF) << 8) | ( b & 0xFF));
-        return b;
-    }
+//    private char getChar(byte b) {
+//        return (char) (((0 & 0xFF) << 8) | (b & 0xFF));
+//        // return b;
+//    }
 
     /**
      * Decode in block-io style, rather than nio. because reps protocol has a
@@ -60,7 +79,6 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
             case TO_READ_PREFIX:
                 byte prefix = in.readByte();
                 // 开始读命令
-                // 注意 增量复制的时候这个地方有问题，特别是offset不是从master出来的值。错误的字符应该也算上
 
                 if (prefix == '*') {
                     checkpoint(RedisProtocolState.TO_READ_ARRAY_NUM);
@@ -72,18 +90,20 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
                     checkpoint(RedisProtocolState.TO_READ_INTEGER);
                 } else if (prefix == '$') {
                     checkpoint(RedisProtocolState.TO_READ_BULK);
-                    // } else if (prefix == '\r') {
-                    // // donothing
-                    // logger.info("unexpected prefix : " + getChar(prefix));
-                    // } else if (prefix == '\n') {
-                    // // donothing
-                    // logger.info("unexpected prefix : " + getChar(prefix));
                 } else {
                     // 理论不会到这里
-                    logger.error("unexpected prefix for redis request : " + getChar(prefix));
-                    checkpoint(); // 更新读标记，避免重复读错误的字符
+                    out.add(new UnexpectedMsg(prefix));
+                    checkpoint(); // 更新读标记 ，避免重复读错误的字符
+                    // 注意
+                    // 增量复制的时候这个地方有问题，特别是offset不是从master出来的值。错误的字符应该也算上,移到后面去处理
+                    // if (replyContext.getStatus() ==
+                    // ReplyStatus.FINISH_SEND_PSYNC) {
+                    // 这个阶段发送的字节数应该计入offset
+                    // replyContext.incOffset(1);
+                    // }
                     // ctx.close();
                 }
+
                 break;
             case TO_READ_SIMPLESTR:
                 String simpleString = readStringAndSkipCRCF(in);
@@ -158,26 +178,57 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
                 throw new IllegalStateException("invalide state default!");
             }
         } else {
+            // replyContext.getStatus() == ReplyStatus.TO_TRANSFER_RDB
             // 传输rdb
             // Read RDB size. Master send '$13123123\r\n'
-            if (in.readByte() != '$') {
-                throw new Exception("invalid rdb size prefix!");
-            }
+            if (isReadytoReceive == false) {
+                // 开始接收
+                if (in.readByte() != '$') {
+                    throw new Exception("invalid rdb size prefix!");
+                }
 
-            int len = readIntAndSkipCRCF(in);
-            byte[] rdbByes = new byte[len];
-            in.readBytes(rdbByes);
+                rdbSize = readIntAndSkipCRCF(in);
+                logger.info("begin to receive RDB file, size : {}", rdbSize);
+                // byte[] rdbByes = new byte[len];
+                rdbFileName = String.format("temp-%s.rdb", System.currentTimeMillis());
+                file = new RandomAccessFile(rdbFileName, "rw");
+                isReadytoReceive = true;
+                checkpoint();
+            }
+            byte[] readbuf ;
+            while (readedRdbSize < rdbSize) {
+                int toReadSize = rdbSize - readedRdbSize; // 剩余要读取的
+                if (in.readableBytes() < toReadSize) {
+                    toReadSize = in.readableBytes();
+                }
+                readbuf = new byte[toReadSize];
+                // 非得先读出来。。。
+                in.readBytes(readbuf);
+                file.write(readbuf);
+                readedRdbSize += toReadSize;
+                checkpoint();
+            }
             // 异步线程 解析 rdb
-            parseRDB(rdbByes);
+            parseRDB();
 
             // 重回 命令行模式
             replyContext.setStatus(ReplyStatus.ONLINE_MODE);
             checkpoint(RedisProtocolState.TO_READ_PREFIX);
-            // 清理rdb命令的字节计数，避免错误
 
             // 定时回复 runid 和 offset
             SlaveClient.addAckSchedule(ctx.channel());
         }
+    }
+    
+    private String prettyString(List<byte[]> list){
+        StringBuffer sb = new StringBuffer();
+        sb.append('[');
+        for (byte[] b:list) {
+            sb.append(new String(b));
+            sb.append(',');
+        }
+        sb.setCharAt(sb.length()-1,']');
+        return sb.toString();
     }
 
     /**
@@ -185,12 +236,46 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
      * 
      * @param rdbByes
      */
-    private void parseRDB(final byte[] rdbByes) {
+    private void parseRDB() {
         new Thread() {
             @Override
             public void run() {
-                logger.info("parse RDB length : " + rdbByes.length);
-                // logger.info("RDB : " + rdbByes);
+                RdbParser parser = null;
+                try {
+                    logger.info("parse RDB length : " + file.length());
+
+                    parser = new RdbParser(rdbFileName);
+
+                    Entry e = null;
+                    while ((e = parser.readNext()) != null) {
+                        if (e.getType() == EntryType.DB_SELECT) {
+                            logger.info("DB_SELECT: processing DB: {}", ((DbSelect) e).getId());
+                        } else if (e.getType() == EntryType.EOF) {
+                            logger.info("EOF: finish parsing RDB");
+                        } else if (e.getType() == EntryType.KEY_VALUE_PAIR) {
+                            KeyValuePair kvp = (KeyValuePair) e;
+                            logger.info("KEY_VALUE_PAIR: key= {}  valueType={}  value= {}", new String(kvp.getKey()), kvp.getValueType(), prettyString(kvp.getValues()));
+                        } else if (e.getType() == EntryType.AUX){
+                            Aux aux = (Aux) e;
+                            logger.info("AUX: key= {}  value= {}",new String(aux.getKey()),new String(aux.getValue()));
+                        } else if (e.getType() == EntryType.RESIZE_DB){
+                            ResizeDb resizeDb = (ResizeDb) e;
+                            logger.info("RESIZE_DB: getDbHashTableSize= {} getExpiryHashTableSize= {}", resizeDb.getDbHashTableSize(), resizeDb.getExpiryHashTableSize());
+                        } else {
+                            logger.info("unprocess type: {}", e.getType());
+                        }
+                    }
+                } catch (IOException e) {
+                    logger.error(e.getMessage(), e);
+                } finally {
+                    if (parser != null) {
+                        try {
+                            parser.close();
+                        } catch (IOException e) {
+                            logger.error(e.getMessage(), e);
+                        }
+                    }
+                }
                 replyContext.updateRunidAndOffsetFromRDB();
             }
         }.start();
@@ -210,7 +295,7 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
         return redisCommand != null && redisCommand.getAction() != null && !"".equals(redisCommand.getAction().trim()) && redisCommand.getArgList().size() == argSize - 1;
     }
 
-    private void sendCmdToHandler(List<Object> out, AbstractRedisMsg<?> msg) {
+    private void sendCmdToHandler(List<Object> out, AbstractMsg<?> msg) {
         // logger.info("RedisCommandDecoder: Send command to next handler , cmd : "
         // + JsonUtils.toJSON(cmd));
         out.add(msg);

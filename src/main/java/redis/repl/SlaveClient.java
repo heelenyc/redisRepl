@@ -19,7 +19,7 @@ import redis.repl.coder.RedisMsgDecoder;
 import redis.repl.coder.RedisMsgEncoder;
 import redis.repl.context.ReplyContext;
 import redis.repl.handler.ReplicationHandler;
-import redis.repl.msg.ArrayMsg;
+import redis.repl.msg.redis.ArrayMsg;
 
 /**
  * @author yicheng

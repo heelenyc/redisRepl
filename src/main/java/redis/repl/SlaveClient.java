@@ -43,7 +43,7 @@ public class SlaveClient {
         NioEventLoopGroup group = new NioEventLoopGroup();
         Bootstrap b = new Bootstrap();
 
-        replyContext = new ReplyContext();
+        replyContext = new ReplyContext();// test
 
         b.group(group).channel(NioSocketChannel.class).option(ChannelOption.SO_KEEPALIVE, true).handler(new ChannelInitializer<Channel>() {
 

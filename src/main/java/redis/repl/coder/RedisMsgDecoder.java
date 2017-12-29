@@ -1,13 +1,16 @@
 package redis.repl.coder;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ReplayingDecoder;
-
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.ReplayingDecoder;
 import net.whitbeck.rdbparser.Aux;
 import net.whitbeck.rdbparser.DbSelect;
 import net.whitbeck.rdbparser.Entry;
@@ -15,11 +18,6 @@ import net.whitbeck.rdbparser.EntryType;
 import net.whitbeck.rdbparser.KeyValuePair;
 import net.whitbeck.rdbparser.RdbParser;
 import net.whitbeck.rdbparser.ResizeDb;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import redis.repl.SlaveClient;
 import redis.repl.api.AbstractMsg;
 import redis.repl.api.ReplyStatus;
 import redis.repl.context.ReplyContext;
@@ -39,7 +37,9 @@ import redis.repl.msg.redis.SimpleStringMsg;
 public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
-
+    private static final int RDB_READ_BLOCK = 16 * 1024; // 一次读取16k byte
+    private static byte[] RDB_READ_BLOCK_BUFFER = new byte[RDB_READ_BLOCK];
+    
     private ReplyContext replyContext;
 
     // used to crontrol receive rdb file
@@ -198,10 +198,16 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
             byte[] readbuf ;
             while (readedRdbSize < rdbSize) {
                 int toReadSize = rdbSize - readedRdbSize; // 剩余要读取的
-                if (in.readableBytes() < toReadSize) {
-                    toReadSize = in.readableBytes();
-                }
-                readbuf = new byte[toReadSize];
+                //  这个地方有问题，没法.ReplayingDecoderBuffer.readableBytes() 不准确，如果这个rdb文件较大，可能多次重复读, 所以拆分
+//                if (in.readableBytes() < toReadSize) {
+//                    toReadSize = in.readableBytes();
+//                }
+                if (toReadSize > RDB_READ_BLOCK) {
+                	toReadSize = RDB_READ_BLOCK;
+                	readbuf = RDB_READ_BLOCK_BUFFER; 
+				} else {
+					readbuf = new byte[toReadSize]; 
+				}
                 // 非得先读出来。。。
                 in.readBytes(readbuf);
                 file.write(readbuf);
@@ -209,18 +215,16 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
                 checkpoint();
             }
             // 异步线程 解析 rdb
-            parseRDB();
-
-            // 重回 命令行模式
-            replyContext.setStatus(ReplyStatus.ONLINE_MODE);
+            replyContext.setStatus(ReplyStatus.PARSE_RDB);
+            // rdb解析前停止读取
+            ctx.channel().config().setAutoRead(false);
+            parseRDB(ctx.channel());
             checkpoint(RedisProtocolState.TO_READ_PREFIX);
-
-            // 定时回复 runid 和 offset
-            SlaveClient.addAckSchedule(ctx.channel());
         }
     }
     
-    private String prettyString(List<byte[]> list){
+    @SuppressWarnings("unused")
+	private String prettyString(List<byte[]> list){
         StringBuffer sb = new StringBuffer();
         sb.append('[');
         for (byte[] b:list) {
@@ -236,13 +240,13 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
      * 
      * @param rdbByes
      */
-    private void parseRDB() {
+    private void parseRDB(final Channel ch) {
         new Thread() {
             @Override
             public void run() {
                 RdbParser parser = null;
                 try {
-                    logger.info("parse RDB length : " + file.length());
+                    logger.info("begin parse RDB length : " + file.length());
 
                     parser = new RdbParser(rdbFileName);
 
@@ -251,7 +255,7 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
                         if (e.getType() == EntryType.DB_SELECT) {
                             logger.info("DB_SELECT: processing DB: {}", ((DbSelect) e).getId());
                         } else if (e.getType() == EntryType.EOF) {
-                            logger.info("EOF: finish parsing RDB");
+                        	logger.info("EOF: finish parsing RDB");
                         } else if (e.getType() == EntryType.KEY_VALUE_PAIR) {
                             KeyValuePair kvp = (KeyValuePair) e;
                             logger.info("KEY_VALUE_PAIR: key= {}  valueType={}  value= {}", new String(kvp.getKey()), kvp.getValueType(), prettyString(kvp.getValues()));
@@ -276,7 +280,10 @@ public class RedisMsgDecoder extends ReplayingDecoder<RedisProtocolState> {
                         }
                     }
                 }
+                ch.config().setAutoRead(true);
                 replyContext.updateRunidAndOffsetFromRDB();
+                // 命令行模式
+                replyContext.setStatus(ReplyStatus.ONLINE_MODE);
             }
         }.start();
     }

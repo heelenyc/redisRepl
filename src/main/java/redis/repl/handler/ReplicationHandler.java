@@ -1,14 +1,12 @@
 package redis.repl.handler;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import redis.repl.SlaveClient;
 import redis.repl.api.AbstractMsg;
 import redis.repl.api.ReplyStatus;
 import redis.repl.cmd.CommonCmdUtil;
@@ -61,11 +59,11 @@ public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractMsg<
      */
     private long getPsyncOffset() {
         if (replyContext.getOffset() <= 0) {
-            return replyContext.getOffset();
+            return -1;
         } else {
             return replyContext.getOffset() + 1;
         }
-        // return replyContext.getOffset();
+//         return replyContext.getOffset();
     }
 
     @Override
@@ -101,12 +99,11 @@ public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractMsg<
                 // 如果server 回复是 continue，开始增量模式
                 logger.info("recv :" + msg + "  bytes :" + msg.getOffsetSize());
                 replyContext.setStatus(ReplyStatus.ONLINE_MODE);
-                SlaveClient.addAckSchedule(ctx.channel());
             } else {
                 logger.error("unexpected msg : " + msg);
             }
         } else if (replyContext.getStatus() == ReplyStatus.ONLINE_MODE) {
-            // logger.info("online : " + msg + "  bytes :" + (msg.getOffsetSize() != 14 ? "=====" + msg.getOffsetSize() : ""));
+            logger.info("online : " + msg + "  bytes :" + (msg.getOffsetSize() != 14 ? "=====" + msg.getOffsetSize() : ""));
             if (msg instanceof UnexpectedMsg) {
                 logger.error("[{}] unexpected prefix for redis request : {}", replyContext.getStatus().name(), msg);
                 // 考虑是不是要停掉
@@ -117,6 +114,8 @@ public class ReplicationHandler extends SimpleChannelInboundHandler<AbstractMsg<
                 // 回 pong 操作
                 // ctx.writeAndFlush(CommonCmdUtil.PONG);
             }
-        }
+        } else {
+        	logger.error("unexpected msg : " + msg);
+		}
     }
 }

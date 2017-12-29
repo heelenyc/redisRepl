@@ -3,6 +3,8 @@ package redis.repl;
 import java.util.concurrent.TimeUnit;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -14,6 +16,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import redis.repl.api.ReplyStatus;
 import redis.repl.cmd.CommonCmdUtil;
 import redis.repl.coder.RedisMsgDecoder;
 import redis.repl.coder.RedisMsgEncoder;
@@ -57,23 +60,41 @@ public class SlaveClient {
 
         ChannelFuture f = b.connect("127.0.0.1", 6379).sync();
         logger.info("connected finished!");
+        addAckSchedule(f.channel());
         // will block this thead
         f.channel().closeFuture().sync();
         logger.info("connect close!");
 
     }
     
-    public static void addAckSchedule(final Channel ch){
+	public static void addAckSchedule(final Channel ch){
         // 定时回复 runid 和 offset
         if (replyContext.getIsAckStarted() == false) {
             synchronized (replyContext.getIsAckStarted()) {
                 if (replyContext.getIsAckStarted() == false) {
                     ch.eventLoop().scheduleAtFixedRate(new Runnable() {
+                    	private long loopNum = 0l;
                         @Override
                         public void run() {
-                            ArrayMsg ack = CommonCmdUtil.newReplACKCmd(replyContext.getOffset());
-                            //logger.info("send ack offset : " + replyContext.getOffset());
-                            ch.writeAndFlush(ack);
+                        	loopNum++;
+                        	if (replyContext.getStatus().equals(ReplyStatus.ONLINE_MODE)) {
+//                        		if (loopNum == 30) {
+//                        			ArrayMsg ack = CommonCmdUtil.newReplACKCmd(100l);
+//                                    logger.info("send REPLCONF offset: 0");
+//                                    ch.writeAndFlush(ack);
+//								} else if(loopNum <= 30) {
+								ArrayMsg ack = CommonCmdUtil.newReplACKCmd(replyContext.getOffset());
+								// logger.info("send REPLCONF offset: " + replyContext.getOffset());
+								ch.writeAndFlush(ack);
+//								}
+                        		
+							} else if (loopNum % 5 == 0 && replyContext.getStatus().equals(ReplyStatus.PARSE_RDB)) {
+								logger.info("send \n to master !");
+								ByteBufAllocator alloc = ch.alloc();
+						        ByteBuf buf = alloc.buffer(1);
+						        buf.writeByte('\n');
+                                ch.writeAndFlush(buf);
+							}
                         }
                     }, 1, 1, TimeUnit.SECONDS);
                     replyContext.setIsAckStarted(true);

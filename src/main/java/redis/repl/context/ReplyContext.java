@@ -14,8 +14,8 @@ public class ReplyContext {
     
     private Logger logger = LoggerFactory.getLogger(ReplyContext.class);
 
-    private volatile String runID = "a321c2e94fc938c78eb09d5fabcb4838dabf9b61";
-    private volatile long offset = 16637l;
+    private volatile String runID = "e491a9f300b6a2f08c825abceec014caf11a7961";
+    private volatile long offset = 3925;  // 表示本地slave已经同步到哪里了，psync发送的时候带的offset是开始传输的位置，所以要用本地offset + 1
 //    private volatile String runID = "?";
 //    private volatile long offset = 0l;
     
@@ -92,6 +92,6 @@ public class ReplyContext {
     public void updateRunidAndOffsetFromRDB(){
         this.runID = this.RDB_runID;
         this.offset = this.RDB_offset;
-        logger.info("alter rdb, update runid = " + this.runID + " offset = " + this.offset);
+        logger.info("after rdb, update runid = " + this.runID + " offset = " + this.offset);
     }
 }

@@ -26,6 +26,11 @@ public class UnexpectedMsg extends AbstractMsg<Byte> {
 
     @Override
     public String toString() {
+    	if ('\r' == data) {
+    		return "/r";
+		} else if ('\n' == data) {
+    		return "/n";
+		}
         return new String(new byte[]{data});
     }
     
